@@ -1,0 +1,3 @@
+#ei.[bootstrap.servers]: localhost:9999
+ei.[connections.max.idle.ms]: 9000
+ei.[bootstrap.servers]: localhost:9999

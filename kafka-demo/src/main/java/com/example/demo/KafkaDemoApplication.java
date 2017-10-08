@@ -10,8 +10,13 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.listener.KafkaListenerErrorHandler;
+import org.springframework.kafka.listener.ListenerExecutionFailedException;
+import org.springframework.kafka.support.Acknowledgment;
+import org.springframework.kafka.support.KafkaHeaders;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
-import org.springframework.messaging.handler.annotation.SendTo;
 import org.springframework.stereotype.Component;
 
 @SpringBootApplication
@@ -25,7 +30,6 @@ public class KafkaDemoApplication {
 		return args -> {
 
 			kafkaTemplate.send(TOPIC, "spring-kafka-" + RandomStringUtils.randomAlphanumeric(10));
-			
 
 			// System.out.println(producerProps);
 
@@ -33,14 +37,24 @@ public class KafkaDemoApplication {
 	}
 
 	@Bean
-	ApplicationRunner ar(KafkaTemplate< String, String> kafkaTemplate) {
+	ApplicationRunner ar(KafkaTemplate<String, String> kafkaTemplate) {
 		return args -> {
-			try{
-			for (int i = 0; i < 1; i++) {
-				System.out.println("PUBLISHING");
-				System.out.println(kafkaTemplate.send(TOPIC, "spring-kafka-" + RandomStringUtils.randomAlphanumeric(10)));
-			}
-			} catch (Exception e){
+			try {
+				for (int i = 0; i < 100; i++) {
+					// System.out.println("PUBLISHING");
+					System.out.println(
+							kafkaTemplate.send(TOPIC, "spring-kafka-" + RandomStringUtils.randomAlphanumeric(10)).get()
+									.getProducerRecord());
+				}
+				Thread.sleep(10000L);
+
+				for (int i = 0; i < 100; i++) {
+					// System.out.println("PUBLISHING");
+					System.out.println(
+							kafkaTemplate.send(TOPIC, "spring-kafka-" + RandomStringUtils.randomAlphanumeric(10)).get()
+									.getProducerRecord());
+				}
+			} catch (Exception e) {
 				e.printStackTrace();
 			}
 
@@ -48,53 +62,75 @@ public class KafkaDemoApplication {
 
 		};
 	}
-	
-	@Component
-	
-	public class Listener {
-		
-		@KafkaListener(topics = "kafkademo")
-		@SendTo("test")
-		public String listen(@Payload String message){
-			System.out.println(message);
-			return message;
-		}
-		
-		
-		
+
+	@Bean
+	public KafkaListenerErrorHandler kafkaListenerErrorHandler(KafkaTemplate<String, String> kafkaTemplate) {
+
+		return (message, error) -> {
+			System.out.println("Message ErrorHandler= " + message);
+			System.out.println("Error = " + error);
+			
+			kafkaTemplate.send(message);
+			
+			return "ErRor";
+		};
 	}
-	
 
-	
+	@Component
+	class Listener1 {
 
-	//
-	// @Component
-	// class Listener2 {
-	//
-	// int i = 0;
-	//
-	// @KafkaListener(topics = TOPIC)
-	// public void listen(@Payload String message,
-	// @Header(KafkaHeaders.RECEIVED_PARTITION_ID) int offset, Acknowledgment
-	// ack) throws Exception{
-	// System.out.println("2Message Received: " + message);
-	// System.out.println("2Offset Id : " + offset);
-	// //System.out.println("2Partition Id : " + partition);
-	// //Thread.sleep(200L);
-	// i++;
-	////
-	//// if (i == 10) {
-	//// System.out.println("message exception" + message);
-	////
-	////
-	//// Thread.currentThread().interrupt();
-	//// throw new Exception("STOP CONSUMER");
-	//// }
-	//
-	// ack.acknowledge();
-	// }
-	//
-	// }
+		int i = 0;
+
+		@KafkaListener(id = "Listen1", topics = TOPIC, errorHandler = "kafkaListenerErrorHandler")
+		public void listen(@Payload String message, @Header(KafkaHeaders.RECEIVED_PARTITION_ID) int partition,
+				@Header(KafkaHeaders.OFFSET) int offset, Acknowledgment ack) throws Exception {
+			System.out.println(Thread.currentThread().getName() + " 1Message Received: " + message);
+			System.out.println("1Offset Id : " + offset);
+			System.out.println("1Partition Id : " + partition);
+			// Thread.sleep(200L);
+			i++;
+
+			if (i == 10) {
+				System.out.println("message exception" + message);
+
+				// Thread.currentThread().interrupt();;
+				throw new Exception("STOP CONSUMER");
+			}
+
+			ack.acknowledge();
+		}
+
+		// @KafkaHandler
+		// public void handler()
+
+	}
+
+	@Component
+	class Listener2 {
+
+		int i = 0;
+
+		@KafkaListener(id = "Listen2", topics = TOPIC)
+		public void listen(@Payload String message, @Header(KafkaHeaders.RECEIVED_PARTITION_ID) int partition,
+				@Header(KafkaHeaders.OFFSET) int offset, Acknowledgment ack) throws Exception {
+			System.out.println(Thread.currentThread().getName() + " 2Message Received: " + message);
+			System.out.println("2Offset Id : " + offset);
+			System.out.println("2Partition Id : " + partition);
+			// Thread.sleep(200L);
+			i++;
+			//
+			// if (i == 10) {
+			// System.out.println("message exception" + message);
+			//
+			//
+			// Thread.currentThread().interrupt();
+			// throw new Exception("STOP CONSUMER");
+			// }
+
+			ack.acknowledge();
+		}
+
+	}
 
 	public static void main(String[] args) {
 		SpringApplication.run(KafkaDemoApplication.class, args);

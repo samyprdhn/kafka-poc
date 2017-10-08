@@ -15,6 +15,7 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.listener.AbstractMessageListenerContainer.AckMode;
 import org.springframework.retry.support.RetryTemplate;
 
 @Configuration
@@ -38,15 +39,16 @@ public class KafkaConfig {
 //	
 	
 	@Bean
+	//@ConfigurationProperties(prefix = "ei")
 	public HashMap<String, Object> producerProps() {
 		HashMap<String, Object> configProps = new HashMap<>();
 		configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
 		configProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
 		configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-		configProps.put(ProducerConfig.RETRIES_CONFIG, "10");
-		configProps.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, "500");
-		configProps.put(ProducerConfig.RETRY_BACKOFF_MS_CONFIG, "500");
-		configProps.put("controlled.shutdown.retry.backoff.ms", "100000");
+//		configProps.put(ProducerConfig.RETRIES_CONFIG, "10");
+//		configProps.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, "500");
+//		configProps.put(ProducerConfig.RETRY_BACKOFF_MS_CONFIG, "500");
+//		configProps.put("controlled.shutdown.retry.backoff.ms", "100000");
 		return configProps;
 	}
 
@@ -77,10 +79,10 @@ public class KafkaConfig {
 		ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
 		factory.setConsumerFactory(consumerFactory);
 		factory.setRetryTemplate(new RetryTemplate());
-//		factory.setConcurrency(2);
-//		factory.getContainerProperties().setAckMode(AckMode.MANUAL);
-//		factory.getContainerProperties().setAckCount(1);
-//		factory.getContainerProperties().setAckOnError(false);
+		factory.setConcurrency(1);
+		factory.getContainerProperties().setAckMode(AckMode.MANUAL);
+		factory.getContainerProperties().setAckCount(1);
+		factory.getContainerProperties().setAckOnError(false);
 		
 		return factory;
 	}
@@ -100,4 +102,5 @@ public class KafkaConfig {
 //		}
 //
 //	}
+	
 }
