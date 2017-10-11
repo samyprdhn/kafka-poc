@@ -3,9 +3,11 @@ package com.example.demo;
 import java.util.HashMap;
 
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.annotation.EnableKafka;
@@ -15,6 +17,11 @@ import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaProducerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.core.ProducerFactory;
+import org.springframework.kafka.listener.ErrorHandler;
+import org.springframework.kafka.listener.AbstractMessageListenerContainer.AckMode;
+import org.springframework.retry.RecoveryCallback;
+import org.springframework.retry.RetryContext;
+import org.springframework.retry.policy.SimpleRetryPolicy;
 import org.springframework.retry.support.RetryTemplate;
 
 @Configuration
@@ -38,15 +45,16 @@ public class KafkaConfig {
 //	
 	
 	@Bean
+	@ConfigurationProperties(prefix = "ei")
 	public HashMap<String, Object> producerProps() {
 		HashMap<String, Object> configProps = new HashMap<>();
 		configProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092");
 		configProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
 		configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-		configProps.put(ProducerConfig.RETRIES_CONFIG, "10");
-		configProps.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, "500");
-		configProps.put(ProducerConfig.RETRY_BACKOFF_MS_CONFIG, "500");
-		configProps.put("controlled.shutdown.retry.backoff.ms", "100000");
+//		configProps.put(ProducerConfig.RETRIES_CONFIG, "10");
+//		configProps.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, "500");
+//		configProps.put(ProducerConfig.RETRY_BACKOFF_MS_CONFIG, "500");
+//		configProps.put("controlled.shutdown.retry.backoff.ms", "1000");
 		return configProps;
 	}
 
@@ -63,7 +71,6 @@ public class KafkaConfig {
 		props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
 		props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
 		props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
-		
 		return props;
 	}
 
@@ -76,11 +83,32 @@ public class KafkaConfig {
 	public ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory(ConsumerFactory<String, String> consumerFactory) {
 		ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
 		factory.setConsumerFactory(consumerFactory);
-		factory.setRetryTemplate(new RetryTemplate());
-//		factory.setConcurrency(2);
-//		factory.getContainerProperties().setAckMode(AckMode.MANUAL);
-//		factory.getContainerProperties().setAckCount(1);
-//		factory.getContainerProperties().setAckOnError(false);
+		
+		// Consumer processing retry strategy
+		RetryTemplate retryTemplate = new RetryTemplate();
+		SimpleRetryPolicy retryPolicy = new SimpleRetryPolicy();
+		retryPolicy.setMaxAttempts(5);
+		retryTemplate.setRetryPolicy(retryPolicy);
+		factory.setRetryTemplate(retryTemplate);
+		
+		//filtering strategy -> discard records
+		/*factory.setRecordFilterStrategy(
+			      record -> record.value().contains("spring-kafka"));*/
+		
+		
+		//container properties
+		factory.setConcurrency(10);
+		factory.getContainerProperties().setAckMode(AckMode.MANUAL);
+		factory.getContainerProperties().setAckCount(1);
+		factory.getContainerProperties().setAckOnError(false);
+		
+		
+		//Error Handler
+		factory.getContainerProperties().setErrorHandler(
+				(Exception thrownException, ConsumerRecord<?, ?> data) -> {
+			System.out.println("thrownException "+thrownException);
+			System.out.println("data "+data);
+		});
 		
 		return factory;
 	}
